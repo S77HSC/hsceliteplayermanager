@@ -152,6 +152,8 @@ export default function App() {
 
   // ---------- CRUD actions with Supabase ----------
   const addPlan = async (e) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert('Not logged in');
     e.preventDefault()
     if(!planForm.title) return alert('Plan title required')
     const imgFile = e.target.querySelector("input[type='file']").files[0]
@@ -169,6 +171,8 @@ export default function App() {
   }
 
   const addSession = async (e) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert('Not logged in');
     e.preventDefault()
     if(!sessForm.date || !sessForm.planId) return alert('Select a date and a plan')
     const s = { id:uid(), user_id: user.id, ...sessForm, notes:{} }
@@ -196,6 +200,8 @@ export default function App() {
   }
 
   const addPlayer = async (e) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert('Not logged in');
     e.preventDefault()
     if(!playerForm.name) return alert('Name required')
     const newPlayer = { id:uid(), user_id: user.id, ...playerForm }
@@ -218,6 +224,8 @@ export default function App() {
   }
 
   const upsertGradingRule = async (e)=>{
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert('Not logged in');
     e.preventDefault()
     const skills = gradingForm.skills.split(',').map(s=>s.trim()).filter(Boolean)
     const rule = {
@@ -243,6 +251,8 @@ export default function App() {
   }
 
   const onLogoChange = async (file)=>{
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert('Not logged in');
     const r = new FileReader()
     r.onload = async () => {
       const dataUrl = r.result
@@ -278,7 +288,85 @@ export default function App() {
         <button className='text-sm border rounded px-2 py-1' onClick={handleSignOut}>Sign out</button>
       </header>
 
-      {selectedPlayerId ? null : <Nav onTab={setTab} current={tab}/>}
+      {
+selectedPlayerId ? (
+  <div className='space-y-6'>
+    <Btn variant='outline' onClick={() => setSelectedPlayerId(null)}>← Back to list</Btn>
+    <Section title={`Player Dashboard — ${players.find(p => p.id === selectedPlayerId)?.name || ''}`}>
+      <div className='mb-4 text-sm text-slate-600'>
+        Group: {players.find(p=>p.id===selectedPlayerId)?.classGroup || '—'} ·
+        Position: {players.find(p=>p.id===selectedPlayerId)?.position || '—'} ·
+        Joined: {players.find(p=>p.id===selectedPlayerId)?.joinDate || '—'}
+      </div>
+      <div className='mb-6'>
+        Attendance: {attendancePct(selectedPlayerId)}% ({playerSessions(selectedPlayerId).length} / {sessions.length})
+      </div>
+      <div className='grid md:grid-cols-3 gap-2 mb-6'>
+        {AREAS.map(area => (
+          <div key={area} className='flex justify-between border rounded p-2'>
+            <span>{area}</span>
+            <select value={players.find(p=>p.id===selectedPlayerId)?.belts?.[area] || 'White'}
+              onChange={e=>updateBelt(selectedPlayerId, area, e.target.value)}>
+              {BELT_LEVELS.map(b => <option key={b}>{b}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      
+<Section title='Sessions Attended'>
+  {playerSessions(selectedPlayerId).map(s => {
+    const note = s.notes?.[selectedPlayerId] || { score: '', fourCorners: {}, comment: '' };
+    return (
+      <div key={s.id} className='mb-4 p-3 border rounded'>
+        <div className='font-semibold mb-1'>
+          {fmt(s.date)} — {s.type} — {plans.find(p=>p.id===s.planId)?.title || '—'}
+        </div>
+        <div className='grid grid-cols-5 gap-2 mb-2'>
+          <input
+            type='number'
+            placeholder='Score'
+            value={note.score || ''}
+            onChange={e => updateNote(s.id, selectedPlayerId, { score: e.target.value })}
+            className='border rounded p-1 text-sm'
+          />
+          {['technical','physical','psychological','social'].map(corner => (
+            <input
+              key={corner}
+              type='number'
+              placeholder={corner}
+              value={note.fourCorners?.[corner] || ''}
+              onChange={e => updateNote(s.id, selectedPlayerId, {
+                fourCorners: {
+                  ...note.fourCorners,
+                  [corner]: e.target.value
+                }
+              })}
+              className='border rounded p-1 text-sm'
+            />
+          ))}
+        </div>
+        <textarea
+          placeholder='Comments'
+          value={note.comment || ''}
+          onChange={e => updateNote(s.id, selectedPlayerId, { comment: e.target.value })}
+          className='border rounded p-1 w-full text-sm'
+        />
+      </div>
+    );
+  })}
+</Section>
+
+      <Section title='Grading History'>
+        {players.find(p=>p.id===selectedPlayerId)?.gradingHistory?.length
+          ? players.find(p=>p.id===selectedPlayerId).gradingHistory.map((g,i)=>(
+              <div key={i} className='text-sm'>{g.date} — {g.belt}</div>
+            ))
+          : <div className='text-sm text-slate-500'>No grading history</div>}
+      </Section>
+    </Section>
+  </div>
+) :
+ <Nav onTab={setTab} current={tab}/>}
 
       {!selectedPlayerId && tab==='plans' && (
         <div className='grid md:grid-cols-2 gap-6'>
