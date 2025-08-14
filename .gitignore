@@ -1,0 +1,6 @@
+# Ignore env files (keep secrets out of git)
+.env
+.env.*
+!.env.example
+!.env.*.example
+"node_modules" 
