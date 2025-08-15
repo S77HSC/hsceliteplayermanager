@@ -1,18 +1,13 @@
-// src/App.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabase";
 
-// Core tabs you already have
 import PlansTab from "./components/PlansTab";
 import SessionsTab from "./components/SessionsTab";
 import PlayersTab from "./components/PlayersTab";
-
-// Optional extra tabs (leave imports if you have them; or comment out + remove from TABS below)
 import ParentReportTab from "./components/ParentReportTab";
 import GradingTab from "./components/GradingTab";
 import SettingsTab from "./components/SettingsTab";
 
-/* ---------- Simple sign-in panel (inline, no extra file) ---------- */
 function SignInCard() {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
@@ -77,9 +72,9 @@ function SignInCard() {
 }
 
 export default function App() {
-  /* ---------------- Auth ---------------- */
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -102,10 +97,8 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
-  /* ---------------- Branding ---------------- */
   const [branding, setBranding] = useState(null);
 
-  // Load branding for this user (one row per user)
   useEffect(() => {
     if (!userId) return;
     (async () => {
@@ -120,10 +113,10 @@ export default function App() {
 
   const accent = branding?.accent || "#0f172a";
   const logoUrl = branding?.logo_path
-    ? supabase.storage.from("branding").getPublicUrl(branding.logo_path).data.publicUrl
+    ? supabase.storage.from("branding").getPublicUrl(branding.logo_path).data
+        .publicUrl
     : null;
 
-  /* ---------------- Tabs ---------------- */
   const TABS = useMemo(
     () => [
       { key: "plans", label: "Plans" },
@@ -137,7 +130,6 @@ export default function App() {
   );
   const [active, setActive] = useState("plans");
 
-  /* ---------------- Data ---------------- */
   const [plans, setPlans] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [players, setPlayers] = useState([]);
@@ -191,7 +183,6 @@ export default function App() {
     setGradings(data || []);
   }
 
-  // Fetch when logged in
   useEffect(() => {
     if (!userId) return;
     fetchPlans();
@@ -201,7 +192,6 @@ export default function App() {
     fetchGradings();
   }, [userId]);
 
-  /* ---- “Schedule this plan” → prefill Sessions ---- */
   const [prefillFromPlan, setPrefillFromPlan] = useState(null);
   function handleSchedulePlan(plan) {
     setPrefillFromPlan({
@@ -213,14 +203,12 @@ export default function App() {
     setActive("sessions");
   }
 
-  /* ---------------- Gate: show sign-in until authenticated ---------------- */
   if (!userId) return <SignInCard />;
 
-  /* ---------------- Dashboard ---------------- */
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-hidden">
       <header className="app-shell">
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           {/* Title + brand badge */}
           <div className="flex items-center gap-3">
             <div className="text-xl font-semibold">Elite Player Manager</div>
@@ -230,22 +218,25 @@ export default function App() {
                 style={{ borderColor: accent }}
                 title={branding.slogan || branding.brand_name}
               >
-                {logoUrl ? (
+                {logoUrl && (
                   <img src={logoUrl} alt="logo" className="w-5 h-5 rounded" />
-                ) : null}
+                )}
                 <span className="font-medium" style={{ color: accent }}>
                   {branding.brand_name || "Brand"}
                 </span>
-                {branding.slogan ? (
-                  <span className="text-xs text-slate-500">— {branding.slogan}</span>
-                ) : null}
+                {branding.slogan && (
+                  <span className="text-xs text-slate-500">
+                    — {branding.slogan}
+                  </span>
+                )}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Desktop: email + logout */}
+          <div className="hidden md:flex items-center gap-2">
             {userEmail && (
-              <span className="text-sm text-slate-600 hidden md:inline">
+              <span className="text-sm text-slate-600 truncate max-w-[150px]">
                 {userEmail}
               </span>
             )}
@@ -253,10 +244,20 @@ export default function App() {
               Logout
             </button>
           </div>
+
+          {/* Mobile: hamburger */}
+          <div className="flex md:hidden">
+            <button
+              className="btn btn-outline"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+            >
+              {mobileMenuOpen ? "✕" : "☰"}
+            </button>
+          </div>
         </div>
 
-        {/* Tabs (flush-left; .tab-active for current) */}
-        <nav className="top-tabs">
+        {/* Desktop tabs */}
+        <nav className="top-tabs hidden md:flex">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -267,7 +268,35 @@ export default function App() {
             </button>
           ))}
         </nav>
-        {/* Slim accent bar under header */}
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="flex flex-col gap-2 mt-2 md:hidden">
+            {userEmail && (
+              <span className="text-sm text-slate-600 truncate max-w-full">
+                {userEmail}
+              </span>
+            )}
+            <button className="btn btn-outline w-full" onClick={logout}>
+              Logout
+            </button>
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                className={`tab w-full text-left ${
+                  active === t.key ? "tab-active" : ""
+                }`}
+                onClick={() => {
+                  setActive(t.key);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ background: accent, height: 2 }} />
       </header>
 
@@ -280,7 +309,6 @@ export default function App() {
             onScheduleRequest={handleSchedulePlan}
           />
         )}
-
         {active === "sessions" && (
           <SessionsTab
             userId={userId}
@@ -296,7 +324,6 @@ export default function App() {
             onPrefillConsumed={() => setPrefillFromPlan(null)}
           />
         )}
-
         {active === "players" && (
           <PlayersTab
             userId={userId}
@@ -307,7 +334,6 @@ export default function App() {
             gradings={gradings}
           />
         )}
-
         {active === "grading" && (
           <GradingTab
             userId={userId}
@@ -318,7 +344,6 @@ export default function App() {
             fetchGradings={fetchGradings}
           />
         )}
-
         {active === "reports" && (
           <ParentReportTab
             userId={userId}
@@ -328,7 +353,6 @@ export default function App() {
             gradings={gradings}
           />
         )}
-
         {active === "settings" && (
           <SettingsTab userId={userId} onChange={(b) => setBranding(b)} />
         )}
@@ -336,4 +360,3 @@ export default function App() {
     </div>
   );
 }
-
