@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
  * - Left: condensed 2-column plan form (no inner scroll)
  * - Right: session design picker (smaller search input)
  *
- * Now shows designs saved in:
+ * Shows designs saved in:
  *  1) Supabase table: session_designs
  *  2) localStorage key: "epm_sessions_v1" (Designer compatibility)
  */
@@ -174,6 +174,7 @@ export default function PlansTab({ userId, onOpenDesigner }) {
 
     const attachmentPaths = []; // upload to storage if needed
 
+    // IMPORTANT: match prod column names (lower-case)
     const payload = {
       user_id: userId,
       title: title.trim(),
@@ -181,15 +182,15 @@ export default function PlansTab({ userId, onOpenDesigner }) {
       description,
       topics,
       format,
-      defaultLocation,
-      defaultTime,
-      fourCorners: {
+      defaultlocation: defaultLocation,
+      defaulttime: defaultTime,
+      fourcorners: {
         technical: notesTech,
         physical: notesPhys,
         psychological: notesPsy,
         social: notesSoc,
       },
-      attachmentPaths,
+      attachmentpaths: attachmentPaths,
       design_id: linkedDesign?.id || null,
       design_name: linkedDesign?.name || null,
       design_thumb: linkedDesign?.thumbnail_url || null,
@@ -201,7 +202,7 @@ export default function PlansTab({ userId, onOpenDesigner }) {
     if (error) {
       console.error(error);
       alert(
-        "Failed to save plan. Verify your 'plans' columns match the payload."
+        `Failed to save plan. Verify your 'plans' columns match the payload.\n\n${error.message || ""}`
       );
       return;
     }
