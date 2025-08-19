@@ -7,7 +7,6 @@ import PlayersTab from "./components/PlayersTab";
 import ParentReportTab from "./components/ParentReportTab";
 import GradingTab from "./components/GradingTab";
 import SettingsTab from "./components/SettingsTab";
-import SessionPlannerTab from "./components/SessionPlannerTab"; // ← NEW
 
 function SignInCard() {
   const [email, setEmail] = useState("");
@@ -121,7 +120,6 @@ export default function App() {
   const TABS = useMemo(
     () => [
       { key: "plans", label: "Plans" },
-      { key: "designer", label: "Session Designer" }, // ← NEW
       { key: "sessions", label: "Sessions" },
       { key: "players", label: "Players" },
       { key: "grading", label: "Grading" },
@@ -130,7 +128,7 @@ export default function App() {
     ],
     []
   );
-  const [active, setActive] = useState("plans"); // set to "designer" if you want it by default
+  const [active, setActive] = useState("plans");
 
   const [plans, setPlans] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -139,7 +137,7 @@ export default function App() {
   const [gradings, setGradings] = useState([]);
 
   // ---------- FETCHERS ----------
-  // Normalize legacy snake_case to the camelCase your UI expects.
+  // Your table is camelCase; keep select("*") and normalize to what the UI uses. :contentReference[oaicite:2]{index=2}
   async function fetchPlans() {
     if (!userId) return;
     const { data, error } = await supabase
@@ -155,13 +153,18 @@ export default function App() {
       return;
     }
 
+    // Normalize possible legacy names to the camelCase your UI expects
     const mapped = (data || []).map((p) => ({
       ...p,
       defaultLocation: p.defaultLocation ?? p.default_location ?? "",
       defaultTime: p.defaultTime ?? p.default_time ?? "",
       fourCorners: p.fourCorners ?? p.four_corners ?? {},
+      // support either "attachments" (URLs) or storage paths:
       attachmentPaths:
-        p.attachments ?? p.attachmentPaths ?? p.attachment_paths ?? [],
+        p.attachments ??
+        p.attachmentPaths ??
+        p.attachment_paths ??
+        [],
     }));
     setPlans(mapped);
   }
@@ -357,13 +360,6 @@ export default function App() {
             onSchedulePlan={handleSchedulePlan}
           />
         )}
-
-        {active === "designer" && (
-          <div className="h-[calc(100vh-160px)]">
-            <SessionPlannerTab />
-          </div>
-        )}
-
         {active === "sessions" && (
           <SessionsTab
             userId={userId}
@@ -379,7 +375,6 @@ export default function App() {
             onPrefillConsumed={() => setPrefillFromPlan(null)}
           />
         )}
-
         {active === "players" && (
           <PlayersTab
             userId={userId}
@@ -390,7 +385,6 @@ export default function App() {
             gradings={gradings}
           />
         )}
-
         {active === "grading" && (
           <GradingTab
             userId={userId}
@@ -401,7 +395,6 @@ export default function App() {
             fetchGradings={fetchGradings}
           />
         )}
-
         {active === "reports" && (
           <ParentReportTab
             userId={userId}
@@ -411,7 +404,6 @@ export default function App() {
             gradings={gradings}
           />
         )}
-
         {active === "settings" && (
           <SettingsTab userId={userId} onChange={(b) => setBranding(b)} />
         )}

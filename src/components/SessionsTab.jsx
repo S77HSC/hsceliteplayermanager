@@ -2,20 +2,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-/** Small star component for 1..5 */
+/** 1..5 star input */
 function StarRating({ value = 0, onChange }) {
   const v = Number(value) || 0;
   return (
-    <div className="inline-flex items-center gap-1 whitespace-nowrap select-none relative z-10">
+    <div className="inline-flex items-center gap-1 whitespace-nowrap select-none">
       {Array.from({ length: 5 }).map((_, i) => {
         const filled = i < v;
         return (
           <button
             key={i}
             type="button"
+            onClick={() => onChange?.(i + 1)}
             className={`text-lg leading-none ${filled ? "text-yellow-500" : "text-slate-300"}`}
-            onClick={() => onChange(i + 1)}
-            aria-label={`Set to ${i + 1}`}
+            title={`${i + 1}`}
+            aria-label={`${i + 1} star`}
           >
             ★
           </button>
@@ -25,7 +26,7 @@ function StarRating({ value = 0, onChange }) {
         <button
           type="button"
           className="ml-2 text-xs text-slate-500"
-          onClick={() => onChange(0)}
+          onClick={() => onChange?.(0)}
           title="Clear rating"
           aria-label="Clear rating"
         >
@@ -47,9 +48,7 @@ export default function SessionsTab({
   /** tell App we consumed the prefill */
   onPrefillConsumed,
 }) {
-  const [editingId, setEditingId] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-
+  /* ---------- Form state ---------- */
   const [form, setForm] = useState({
     date: "",
     type: "",
@@ -59,8 +58,10 @@ export default function SessionsTab({
     time: "",
     expected_attendees: [],
     attendees: [],
-    notes: {}, // { [playerId]: { score, general, fa4:{technical,tactical,physical,social} } }
+    notes: {}, // { [playerId]: { general, fa4:{technical,tactical,physical,social} } }
   });
+  const [editingId, setEditingId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   /* ---------- Helpers ---------- */
   const playersById = useMemo(
@@ -85,9 +86,10 @@ export default function SessionsTab({
 
   function toggleExpected(pid) {
     setForm((s) => {
-      const exists = s.expected_attendees.some((x) => String(x) === String(pid));
+      const id = String(pid);
+      const exists = s.expected_attendees.some((x) => String(x) === id);
       const expected_attendees = exists
-        ? s.expected_attendees.filter((x) => String(x) !== String(pid))
+        ? s.expected_attendees.filter((x) => String(x) !== id)
         : [...s.expected_attendees, pid];
       return { ...s, expected_attendees };
     });
@@ -95,10 +97,9 @@ export default function SessionsTab({
 
   function toggleAttendee(pid) {
     setForm((s) => {
-      const exists = s.attendees.some((x) => String(x) === String(pid));
-      const attendees = exists
-        ? s.attendees.filter((x) => String(x) !== String(pid))
-        : [...s.attendees, pid];
+      const id = String(pid);
+      const exists = s.attendees.some((x) => String(x) === id);
+      const attendees = exists ? s.attendees.filter((x) => String(x) !== id) : [...s.attendees, pid];
       return { ...s, attendees };
     });
   }
@@ -138,6 +139,51 @@ export default function SessionsTab({
     } catch {}
   }
 
+  function rescheduleSession(s) {
+    // Load the session into the form, but as a new record with empty date/time.
+    setEditingId(null);
+    setForm({
+      date: "",
+      time: "",
+      type: s.type || "",
+      planid: s.planid || "",
+      group_name: "",
+      location: s.location || "",
+      expected_attendees: [],
+      attendees: [],
+      notes: {},
+    });
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {}
+  }
+
+  /** Make/return a plan id if user hasn't chosen one but typed a type/name */
+  async function ensurePlanId() {
+    if (form.planid) return form.planid;
+    if (!form.type) return null;
+
+    // Try to reuse an existing plan (title match, case-insensitive)
+    const { data: existing, error: selErr } = await supabase
+      .from("plans")
+      .select("id")
+      .eq("user_id", userId)
+      .ilike("title", form.type)
+      .maybeSingle();
+
+    if (!selErr && existing) return existing.id;
+
+    // Otherwise create a minimal plan
+    const { data, error } = await supabase
+      .from("plans")
+      .insert([{ user_id: userId, title: form.type }])
+      .select("id")
+      .single();
+
+    if (error) throw error;
+    return data.id;
+  }
+
   async function saveSession() {
     const payload = {
       id: editingId || crypto.randomUUID(),
@@ -154,13 +200,18 @@ export default function SessionsTab({
     };
 
     try {
+      // Ensure we have a plan if user typed a session name but left plan blank
+      const planId = await ensurePlanId();
+      if (planId) payload.planid = planId;
+
       if (editingId) {
         const { error } = await supabase.from("sessions").update(payload).eq("id", editingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("sessions").insert([payload]);
+        const { error } = await supabase.from("sessions").insert(payload);
         if (error) throw error;
       }
+
       resetForm();
       fetchSessions && fetchSessions();
     } catch (e) {
@@ -208,18 +259,20 @@ export default function SessionsTab({
             className="input"
             value={form.date}
             onChange={(e) => setForm((s) => ({ ...s, date: e.target.value }))}
+            placeholder="dd/mm/yyyy"
           />
           <input
+            type="text"
             className="input"
-            placeholder="Session type / name"
             value={form.type}
             onChange={(e) => setForm((s) => ({ ...s, type: e.target.value }))}
+            placeholder="Session type / name"
           />
-
+          {/* Plan (optional) */}
           <select
-            className="select"
-            value={form.planid}
-            onChange={(e) => setForm((s) => ({ ...s, planid: e.target.value }))}
+            className="input"
+            value={form.planid || ""}
+            onChange={(e) => setForm((s) => ({ ...s, planid: e.target.value || "" }))}
           >
             <option value="">Plan (optional)</option>
             {plans.map((p) => (
@@ -228,42 +281,38 @@ export default function SessionsTab({
               </option>
             ))}
           </select>
-
           <input
+            type="text"
             className="input"
-            placeholder="Group name (optional)"
             value={form.group_name}
             onChange={(e) => setForm((s) => ({ ...s, group_name: e.target.value }))}
+            placeholder="Group name (optional)"
           />
-
           <input
+            type="text"
             className="input"
-            placeholder="Location"
             value={form.location}
             onChange={(e) => setForm((s) => ({ ...s, location: e.target.value }))}
+            placeholder="Location"
           />
           <input
             type="time"
             className="input"
-            placeholder="Time"
             value={form.time}
             onChange={(e) => setForm((s) => ({ ...s, time: e.target.value }))}
+            placeholder="--:--"
           />
         </div>
 
         {/* Expected attendees */}
         <div className="mb-3">
           <p className="text-sm font-semibold mb-1">Expected attendees</p>
-          <div className="max-h-48 overflow-y-auto border rounded-xl p-2">
+          <div className="max-h-64 overflow-y-auto border rounded-xl p-2">
             {players.map((p) => {
               const checked = form.expected_attendees.some((x) => String(x) === String(p.id));
               return (
                 <label key={p.id} className="flex items-center gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleExpected(p.id)}
-                  />
+                  <input type="checkbox" checked={checked} onChange={() => toggleExpected(p.id)} />
                   <span className="text-sm">{p.name}</span>
                 </label>
               );
@@ -287,54 +336,45 @@ export default function SessionsTab({
                       type="checkbox"
                       checked={isHere}
                       onChange={() => toggleAttendee(p.id)}
+                      className="mt-0.5"
                     />
                     <span className="text-sm">{p.name}</span>
                   </label>
 
+                  {/* FA4 mini ratings */}
                   {isHere && (
-                    <div className="ml-6 mt-2 space-y-2">
-                      <div className="grid md:grid-cols-3 grid-cols-1 gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          max={10}
-                          className="input"
-                          placeholder="Engagement score (1–10)"
-                          value={note.score ?? ""}
-                          onChange={(e) => updateNote(p.id, "score", e.target.value ? Number(e.target.value) : null)}
-                        />
-                        <div className="md:col-span-2">
-                          <input
-                            className="input"
-                            placeholder="General feedback"
-                            value={note.general || ""}
-                            onChange={(e) => updateNote(p.id, "general", e.target.value)}
+                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {["technical", "tactical", "physical", "social"].map((corner) => (
+                        <div key={corner} className="flex flex-col items-start">
+                          <StarRating
+                            value={fa4[corner] || 0}
+                            onChange={(val) => updateFa4(p.id, corner, val)}
                           />
+                          <span className="text-xs capitalize text-slate-500 mt-1">{corner}</span>
                         </div>
-                      </div>
-
-                      {/* FA4 ratings: labels under stars to avoid overlap */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {["technical", "tactical", "physical", "social"].map((corner) => (
-                          <div key={corner} className="flex flex-col items-start">
-                            <StarRating
-                              value={fa4[corner] || 0}
-                              onChange={(val) => updateFa4(p.id, corner, val)}
-                            />
-                            <span className="text-xs capitalize text-slate-600 mt-1">{corner}</span>
-                          </div>
-                        ))}
-                      </div>
+                      ))}
                     </div>
+                  )}
+
+                  {/* General note */}
+                  {isHere && (
+                    <textarea
+                      className="input mt-2"
+                      rows={2}
+                      placeholder="Notes (optional)"
+                      value={note.general || ""}
+                      onChange={(e) => updateNote(p.id, "general", e.target.value)}
+                    />
                   )}
                 </div>
               );
             })}
+            {players.length === 0 && <p className="text-sm text-slate-500">No players.</p>}
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <button className="btn-primary" onClick={saveSession}>
+        <div className="flex items-center gap-2">
+          <button className="btn" onClick={saveSession}>
             {editingId ? "Update session" : "Save session"}
           </button>
           {editingId && (
@@ -350,7 +390,7 @@ export default function SessionsTab({
         <h2 className="section-title">Sessions</h2>
         <div className="space-y-3">
           {sessions.map((s) => {
-            const plan = plans.find((p) => p.id === s.planid);
+            const plan = plans.find((p) => String(p.id) === String(s.planid));
             return (
               <div key={s.id} className="border border-slate-200 rounded-xl p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -359,15 +399,24 @@ export default function SessionsTab({
                       {s.date || "—"} · {s.type || "Session"}
                     </p>
                     <p className="text-sm text-slate-600">
-                      Plan: {plan?.title || "—"}{plan?.focus ? ` · Focus: ${plan.focus}` : ""}
+                      Plan: {plan?.title || "—"}
+                      {plan?.focus ? ` · Focus: ${plan.focus}` : ""}
                     </p>
                     <p className="text-xs text-slate-600">
-                      Expected: {s.expected_attendees?.length || 0} · Attended: {s.attendees?.length || 0}
+                      Expected: {s.expected_attendees?.length || 0} · Attended:{" "}
+                      {s.attendees?.length || 0}
                     </p>
                   </div>
-                  <div className="plan-actions" style={{ marginTop: 0 }}>
-                    <button className="btn btn-outline btn-chip" onClick={() => editSession(s)}>
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button className="btn btn-chip" onClick={() => editSession(s)}>
                       Edit
+                    </button>
+                    <button
+                      className="btn btn-outline btn-chip"
+                      onClick={() => rescheduleSession(s)}
+                      title="Copy this session into the form to schedule at a new time/group"
+                    >
+                      Reschedule
                     </button>
                     <button className="btn btn-danger btn-chip" onClick={() => setConfirmDelete(s)}>
                       Delete
@@ -377,23 +426,28 @@ export default function SessionsTab({
               </div>
             );
           })}
-          {sessions.length === 0 && <p className="text-sm text-slate-500">No sessions yet.</p>}
+          {sessions.length === 0 && (
+            <p className="text-sm text-slate-500">No sessions yet. Create your first one ↑</p>
+          )}
         </div>
       </div>
 
-      {/* Delete confirm */}
+      {/* Confirm delete modal */}
       {confirmDelete && (
         <div className="modal-backdrop">
           <div className="modal">
-            <h4 className="modal-title">Delete this session?</h4>
-            <p>
+            <h3 className="text-lg font-semibold">Delete this session?</h3>
+            <p className="text-sm text-slate-600 mt-1">
               {confirmDelete.date || "—"} · {confirmDelete.type || "Session"}
             </p>
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>
                 Cancel
               </button>
-              <button className="btn btn-danger" onClick={() => deleteSession(confirmDelete.id)}>
+              <button
+                className="btn btn-danger"
+                onClick={() => deleteSession(confirmDelete.id)}
+              >
                 Yes, delete
               </button>
             </div>
