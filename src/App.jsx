@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "./lib/supabase";
+// src/App.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "./lib/supabase"; // ← adjust if your client is elsewhere
 
+// Your existing tabs/components (keep these imports as in your project)
 import PlansTab from "./components/PlansTab";
 import SessionsTab from "./components/SessionsTab";
 import PlayersTab from "./components/PlayersTab";
 import ParentReportTab from "./components/ParentReportTab";
 import GradingTab from "./components/GradingTab";
 import SettingsTab from "./components/SettingsTab";
-import SessionPlannerTab from "./components/SessionPlannerTab"; // ← NEW
+import SessionPlannerTab from "./components/SessionPlannerTab";
 
+// Intro overlay (no external deps in the component file)
+import EliteIntro from "./components/EliteIntro";
+import logo from "./assets/powerplay-logo.png"; // ensure this file exists
+
+/* ----------------- Minimal Sign-In ----------------- */
 function SignInCard() {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
@@ -72,22 +79,36 @@ function SignInCard() {
   );
 }
 
+/* ----------------- App ----------------- */
 export default function App() {
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Show intro ONLY when logged in (every login)
+  const [showIntro, setShowIntro] = useState(false);
+
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+
+    // Initial session check (e.g., page refresh while logged in)
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
-      setUserId(data.session?.user?.id || null);
-      setUserEmail(data.session?.user?.email || "");
+      const user = session?.user ?? null;
+      setUserId(user?.id || null);
+      setUserEmail(user?.email || "");
+      if (user) setShowIntro(true); // show intro if already logged in
     });
+
+    // React to login/logout
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUserId(session?.user?.id || null);
-      setUserEmail(session?.user?.email || "");
+      const user = session?.user ?? null;
+      setUserId(user?.id || null);
+      setUserEmail(user?.email || "");
+      if (user) setShowIntro(true); // show intro every time you log in
+      else setShowIntro(false);     // hide when logged out
     });
+
     return () => {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
@@ -98,8 +119,8 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
+  // Optional branding from your DB/storage
   const [branding, setBranding] = useState(null);
-
   useEffect(() => {
     if (!userId) return;
     (async () => {
@@ -118,10 +139,11 @@ export default function App() {
         .publicUrl
     : null;
 
+  // Tabs
   const TABS = useMemo(
     () => [
       { key: "plans", label: "Plans" },
-      { key: "designer", label: "Session Designer" }, // ← NEW
+      { key: "designer", label: "Session Designer" },
       { key: "sessions", label: "Sessions" },
       { key: "players", label: "Players" },
       { key: "grading", label: "Grading" },
@@ -130,16 +152,16 @@ export default function App() {
     ],
     []
   );
-  const [active, setActive] = useState("plans"); // set to "designer" if you want it by default
+  const [active, setActive] = useState("plans");
 
+  // Data
   const [plans, setPlans] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [players, setPlayers] = useState([]);
   const [gradeRules, setGradeRules] = useState([]);
   const [gradings, setGradings] = useState([]);
 
-  // ---------- FETCHERS ----------
-  // Normalize legacy snake_case to the camelCase your UI expects.
+  // Fetchers
   async function fetchPlans() {
     if (!userId) return;
     const { data, error } = await supabase
@@ -147,14 +169,12 @@ export default function App() {
       .select("*")
       .eq("user_id", userId)
       .order("title");
-
     if (error) {
       console.error("fetchPlans error:", error);
       alert(`Couldn't fetch plans: ${error.message}`);
       setPlans([]);
       return;
     }
-
     const mapped = (data || []).map((p) => ({
       ...p,
       defaultLocation: p.defaultLocation ?? p.default_location ?? "",
@@ -251,13 +271,16 @@ export default function App() {
     setActive("sessions");
   }
 
-  if (!userId) return <SignInCard />;
+  /* --------- LOGGED OUT: just show login (no intro here) --------- */
+  if (!userId) {
+    return <SignInCard />;
+  }
 
+  /* --------- LOGGED IN APP --------- */
   return (
     <div className="min-h-screen overflow-x-hidden">
       <header className="app-shell">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          {/* Title + brand badge */}
           <div className="flex items-center gap-3">
             <div className="text-xl font-semibold">Elite Player Manager</div>
             {branding && (
@@ -281,7 +304,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Desktop: email + logout */}
           <div className="hidden md:flex items-center gap-2">
             {userEmail && (
               <span className="text-sm text-slate-600 truncate max-w-[150px]">
@@ -293,7 +315,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Mobile: hamburger */}
           <div className="flex md:hidden">
             <button
               className="btn btn-outline"
@@ -317,7 +338,7 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Mobile menu dropdown */}
+        {/* Mobile menu */}
         {mobileMenuOpen && (
           <div className="flex flex-col gap-2 mt-2 md:hidden">
             {userEmail && (
@@ -416,6 +437,21 @@ export default function App() {
           <SettingsTab userId={userId} onChange={(b) => setBranding(b)} />
         )}
       </main>
+
+      {/* Intro overlay: shows every time you log in, click triggers fullscreen */}
+      {showIntro && (
+        <EliteIntro
+          onFinish={() => setShowIntro(false)}
+          logoSrc={logoUrl || logo}
+          appName="POWERPLAY"
+          tagline="ELITE PLAYER MANAGER"
+          primary="#111111"
+          secondary="#6EC1FF"
+          duration={2200}
+          autoDismiss={false}     // require click so fullscreen is allowed
+          forceFullscreen={true}  // request fullscreen on click
+        />
+      )}
     </div>
   );
 }
