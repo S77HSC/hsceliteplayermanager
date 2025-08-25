@@ -1,3 +1,4 @@
+// src/components/designer/ItemGraphic.jsx
 import React from "react";
 
 const isNum = (n) => typeof n === "number" && Number.isFinite(n);
@@ -24,6 +25,16 @@ const aliasType = (t) => {
   if (s === "curve-arrow" || s === "curve") return "shape-curve";
   if (s === "s-curve-arrow" || s === "curve2" || s === "s-curve") return "shape-curve2";
   return s;
+};
+
+// >>> NEW: dash helper (supports boolean `dashed` or `-dashed` type)
+const dashArrayFor = (item) => {
+  const sw = Math.max(1, Number(item?.strokeWidth) || 2);
+  const dashed = !!item?.dashed || /-dashed$/i.test(String(item?.type || ""));
+  if (!dashed) return undefined;
+  const dash = Math.max(18, Math.round(sw * 6));
+  const gap  = Math.max(12, Math.round(sw * 3.5));
+  return `${dash} ${gap}`;
 };
 
 export default function ItemGraphic({ item, stageWidth = 800 }) {
@@ -165,6 +176,7 @@ export default function ItemGraphic({ item, stageWidth = 800 }) {
           rx={r}
           fill={fill} stroke={color} strokeWidth={sw}
           style={{ vectorEffect: "non-scaling-stroke" }}
+          strokeDasharray={dashArrayFor(item)}   // ← added
         />
       </Svg>
     );
@@ -180,6 +192,7 @@ export default function ItemGraphic({ item, stageWidth = 800 }) {
           fill={rgba(item.fill || "#ffffff", item.fillAlpha ?? 0.12)}
           stroke={color} strokeWidth={sw}
           style={{ vectorEffect: "non-scaling-stroke" }}
+          strokeDasharray={dashArrayFor(item)}   // ← added
         />
       </Svg>
     );
@@ -195,63 +208,84 @@ export default function ItemGraphic({ item, stageWidth = 800 }) {
           fill={rgba(item.fill || "#ffffff", item.fillAlpha ?? 0.12)}
           stroke={color} strokeWidth={sw}
           style={{ vectorEffect: "non-scaling-stroke" }}
+          strokeDasharray={dashArrayFor(item)}   // ← added
         />
       </Svg>
     );
   }
 
   if (t === "shape-line" || t === "shape-line-dashed") {
-    const len0 = pctToPx(item.lengthPct ?? 14, stageWidth);
-    const len = safePx(len0, 8);
-    const hh = Math.max(8, sw * 4);
-    const dash = t === "shape-line-dashed" ? `${sw * 2.2} ${sw * 1.6}` : "none";
-    return (
-      <Svg w={len} h={hh}>
-        {/* halo */}
-        <line x1="0" y1={hh/2} x2={len} y2={hh/2}
-          stroke="rgba(255,255,255,.65)" strokeWidth={sw + 2} strokeLinecap="round"
-          style={{ vectorEffect: "non-scaling-stroke" }}
-        />
-        {/* line */}
-        <line
-          x1="0" y1={hh/2} x2={len} y2={hh/2}
-          stroke={color} strokeWidth={sw} strokeLinecap="round"
-          strokeDasharray={dash}
-          style={{ vectorEffect: "non-scaling-stroke" }}
-        />
-      </Svg>
-    );
-  }
+  const len0 = pctToPx(item.lengthPct ?? 14, stageWidth);
+  const len = safePx(len0, 8);
+  const hh = Math.max(8, sw * 4);
+  const dash = dashArrayFor(item); // <<< use same dash for halo + shaft
+  return (
+    <Svg w={len} h={hh}>
+      {/* halo (also dashed so gaps are real) */}
+      <line
+        x1="0" y1={hh/2} x2={len} y2={hh/2}
+        stroke="rgba(255,255,255,.65)"
+        strokeWidth={sw + 2}
+        strokeLinecap="round"
+        style={{ vectorEffect: "non-scaling-stroke" }}
+        strokeDasharray={dash}
+      />
+      {/* shaft */}
+      <line
+        x1="0" y1={hh/2} x2={len} y2={hh/2}
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinecap="round"
+        style={{ vectorEffect: "non-scaling-stroke" }}
+        strokeDasharray={dash}
+      />
+    </Svg>
+  );
+}
 
-  // ---------- Better ARROWS (with clamped lengths) ----------
+
   const ArrowStraight = ({ dashed = false, twoHead = false }) => {
-    const len = safePx(pctToPx(item.lengthPct ?? 14, stageWidth), 12);
-    const hh = Math.max(10, sw * 5);
-    const halo = sw + 2;
-    const id = `arr_${item.id || Math.random().toString(36).slice(2)}`;
-    const dash = dashed ? `${sw * 2.2} ${sw * 1.6}` : "none";
-    return (
-      <Svg w={len} h={hh}>
-        <defs>
-          <marker id={`${id}_end`} markerUnits="strokeWidth" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
-            <polygon points="0,0 6,3 0,6" fill={color} />
-          </marker>
-          <marker id={`${id}_start`} markerUnits="strokeWidth" markerWidth="6" markerHeight="6" refX="0.5" refY="3" orient="auto">
-            <polygon points="6,0 0,3 6,6" fill={color} />
-          </marker>
-        </defs>
-        <line x1="2" y1={hh/2} x2={len - 2} y2={hh/2}
-          stroke="rgba(255,255,255,.65)" strokeWidth={halo} strokeLinecap="round"
-          style={{ vectorEffect: "non-scaling-stroke" }} />
-        <line x1="2" y1={hh/2} x2={len - 2} y2={hh/2}
-          stroke={color} strokeWidth={sw} strokeLinecap="round"
-          strokeDasharray={dash}
-          markerEnd={`url(#${id}_end)`}
-          markerStart={twoHead ? `url(#${id}_start)` : undefined}
-          style={{ vectorEffect: "non-scaling-stroke" }} />
-      </Svg>
-    );
-  };
+  const len = safePx(pctToPx(item.lengthPct ?? 14, stageWidth), 12);
+  const hh = Math.max(10, sw * 5);
+  const halo = sw + 2;
+  const id = `arr_${item.id || Math.random().toString(36).slice(2)}`;
+  const dash = dashArrayFor({ ...item, dashed }); // <<< use helper
+  return (
+    <Svg w={len} h={hh}>
+      <defs>
+        <marker id={`${id}_end`} markerUnits="strokeWidth" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <polygon points="0,0 6,3 0,6" fill={color} />
+        </marker>
+        <marker id={`${id}_start`} markerUnits="strokeWidth" markerWidth="6" markerHeight="6" refX="0.5" refY="3" orient="auto">
+          <polygon points="6,0 0,3 6,6" fill={color} />
+        </marker>
+      </defs>
+
+      {/* halo (dashed too) */}
+      <line
+        x1="2" y1={hh/2} x2={len - 2} y2={hh/2}
+        stroke="rgba(255,255,255,.65)"
+        strokeWidth={halo}
+        strokeLinecap="round"
+        style={{ vectorEffect: "non-scaling-stroke" }}
+        strokeDasharray={dash}
+      />
+
+      {/* shaft */}
+      <line
+        x1="2" y1={hh/2} x2={len - 2} y2={hh/2}
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinecap="round"
+        style={{ vectorEffect: "non-scaling-stroke" }}
+        strokeDasharray={dash}
+        markerEnd={`url(#${id}_end)`}
+        markerStart={twoHead ? `url(#${id}_start)` : undefined}
+      />
+    </Svg>
+  );
+};
+
 
   const ArrowCurve = ({ sCurve = false }) => {
     const len = safePx(pctToPx(item.lengthPct ?? 18, stageWidth), 12);
