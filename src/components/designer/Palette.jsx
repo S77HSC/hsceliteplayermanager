@@ -1,46 +1,79 @@
 import React from "react";
+import { PALETTE } from "./constants";
+import ItemGraphic from "./ItemGraphic";
 
-function PalettePreview({ type, color = "#fff" }) {
-  switch (type) {
-    case "player": return <div className="w-8 h-8 rounded-full border-2 border-black/30" style={{ background: color }} />;
-    case "ball":   return <div className="w-7 h-7 rounded-full border border-black/70 bg-white grid place-items-center"><div className="w-1.5 h-1.5 rounded-full bg-black/70" /></div>;
-    case "cone":   return <svg viewBox="0 0 100 100" className="w-8 h-8"><path d="M50 5 L85 85 H15 Z" fill={color} stroke="#00000055" strokeWidth="3" /></svg>;
-    case "goal":   return <svg viewBox="0 0 200 120" className="w-10 h-7"><rect x="5" y="40" width="190" height="60" fill="#e5e7eb" stroke="#00000066" strokeWidth="4" /></svg>;
-    case "slalom": return <div className="w-1.5 h-8" style={{ background: color }} />;
-    case "hurdle": return <div className="w-10 h-2" style={{ background: color }} />;
-    case "marker": return <div className="w-4 h-4 rounded-full" style={{ background: color }} />;
-    case "shape-line": return <svg viewBox="0 0 40 8" className="w-10 h-4"><line x1="0" y1="4" x2="40" y2="4" stroke="#111" strokeWidth="3" /></svg>;
-    case "shape-line-dashed": return <svg viewBox="0 0 40 8" className="w-10 h-4"><line x1="0" y1="4" x2="40" y2="4" stroke="#111" strokeWidth="3" strokeDasharray="6 6" /></svg>;
-    case "shape-rect":
-    case "shape-rect-outline": return <svg viewBox="0 0 40 28" className="w-10 h-7"><rect x="3" y="3" width="34" height="22" rx="5" fill={type==="shape-rect" ? "#94a3b84d" : "none"} stroke="#111" strokeWidth="2" /></svg>;
-    case "shape-circle":   return <svg viewBox="0 0 28 28" className="w-7 h-7"><circle cx="14" cy="14" r="12" fill="#94a3b84d" stroke="#111" strokeWidth="2" /></svg>;
-    case "shape-triangle": return <svg viewBox="0 0 32 28" className="w-8 h-7"><polygon points="16,2 30,26 2,26" fill="#94a3b84d" stroke="#111" strokeWidth="2" /></svg>;
-    case "shape-arrow":  return <svg viewBox="0 0 40 12" className="w-10 h-4"><defs><marker id="m1" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><polygon points="0 0, 10 5, 0 10" fill="#111" /></marker></defs><line x1="0" y1="6" x2="34" y2="6" stroke="#111" strokeWidth="3" markerEnd="url(#m1)" /></svg>;
-    case "shape-curve":  return <svg viewBox="0 0 40 20" className="w-10 h-5"><defs><marker id="m2" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><polygon points="0 0, 10 5, 0 10" fill="#111" /></marker></defs><path d="M0 10 Q 20 2, 34 10" fill="none" stroke="#111" strokeWidth="3" markerEnd="url(#m2)"/></svg>;
-    case "shape-curve2": return <svg viewBox="0 0 40 20" className="w-10 h-5"><defs><marker id="m3" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><polygon points="0 0, 10 5, 0 10" fill="#111" /></marker></defs><path d="M0 10 C 10 2, 10 18, 20 10 S 30 2, 34 10" fill="none" stroke="#111" strokeWidth="3" markerEnd="url(#m3)"/></svg>;
-    default: return null;
-  }
+/**
+ * Compact icon grid palette with high-contrast previews and tiny badges.
+ * - Drag to place
+ * - Double-click to add
+ * - Uses ItemGraphic so previews match stage visuals
+ */
+export default function Palette({ onDragStart, onAdd }) {
+  const handleDragStart = (e, entry) => {
+    try {
+      e.dataTransfer.setData("application/json", JSON.stringify(entry));
+      e.dataTransfer.effectAllowed = "copy";
+      onDragStart?.(e, entry);
+    } catch (err) { console.error("Palette dragStart error:", err); }
+  };
+  const handleDoubleClick = (entry) => { try { onAdd?.(entry); } catch (err) { console.error(err); } };
+
+  return (
+    <div className="p-2 grid gap-2" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+      {PALETTE.map((entry) => (
+        <button
+          key={entry.id}
+          type="button"
+          draggable
+          onDragStart={(e) => handleDragStart(e, entry)}
+          onDoubleClick={() => handleDoubleClick(entry)}
+          title={entry.name || entry.id}
+          aria-label={entry.name || entry.id}
+          className="aspect-square rounded-md ring-1 ring-slate-200 bg-white hover:bg-slate-50 transition relative overflow-hidden"
+        >
+          <div className="absolute inset-1 rounded-md" style={{ background: "linear-gradient(180deg, rgba(22,101,52,.22) 0%, rgba(13,79,43,.22) 100%)" }} />
+          <div className="relative w-full h-full grid place-items-center" style={{ filter: "drop-shadow(0 0 1px rgba(0,0,0,.6)) drop-shadow(0 1px 0 rgba(0,0,0,.35))" }}>
+            <PreviewFromItemGraphic entry={entry} />
+          </div>
+          <Badge type={entry.type} name={entry.name} />
+        </button>
+      ))}
+    </div>
+  );
 }
 
-export default function Palette({ palette, onAdd, onDragStart }) {
+function PreviewFromItemGraphic({ entry }) {
+  const item = {
+    id: `pal-${entry.id}`,
+    type: entry.type,
+    ...entry.defaults,
+  };
+  // Scale + safety mins for pct-based shapes
+  if (typeof item.size === "number") item.size = Math.max(12, Math.min(38, item.size));
+  if (typeof item.widthPct === "number")  item.widthPct  = Math.max(4, Math.min(24, item.widthPct));
+  if (typeof item.heightPct === "number") item.heightPct = Math.max(4, Math.min(16, item.heightPct));
+  if (typeof item.sizePct === "number")   item.sizePct   = Math.max(4, Math.min(14, item.sizePct));
+  if (typeof item.lengthPct === "number") item.lengthPct = Math.max(6, Math.min(20, item.lengthPct));
+  if (typeof item.strokeWidth === "number") item.strokeWidth = Math.max(3, item.strokeWidth + 1); else item.strokeWidth = 3;
+
+  return <ItemGraphic item={item} stageWidth={120} />;
+}
+
+function Badge({ type, name }) {
+  const t = String(type || "").toLowerCase();
+  const map = {
+    player: "PL", ball: "Ball", cone: "Cone", marker: "Mk", goal: "Goal", slalom: "Pole", hurdle: "Hrd",
+    "shape-rect": "Box", "shape-rect-outline": "Box○", "shape-circle": "○", "shape-triangle": "△",
+    "shape-line": "—", "shape-line-dashed": "– –", "shape-arrow": "→", "shape-arrow-dashed": "→ ⋯",
+    "shape-arrow-2head": "⇄", "shape-curve": "↝", "shape-curve2": "S↝",
+  };
+  const text = map[t] || (name?.split(" ")[0] ?? "");
   return (
-    <div className="p-3 rounded-2xl border bg-white shadow-sm">
-      <div className="font-semibold mb-2">Kit Palette</div>
-      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
-        {palette.map((p,i)=>(
-          <button
-            key={i}
-            onClick={()=>onAdd(p)}
-            draggable
-            onDragStart={(e)=>onDragStart(e,p)}
-            title={`${p.name} (click to add, drag to place)`}
-            className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:bg-slate-50 active:scale-[0.98] transition"
-          >
-            <PalettePreview type={p.type} color={p.defaults.color || p.defaults.stroke} />
-            <div className="text-[11px] leading-none text-slate-700">{p.name}</div>
-          </button>
-        ))}
-      </div>
-    </div>
+    <span
+      className="absolute bottom-0.5 left-0.5 px-1 py-[2px] rounded text-[10px] font-medium"
+      style={{ background: "rgba(255,255,255,.85)", color: "#0f172a", border: "1px solid rgba(0,0,0,.06)" }}
+    >
+      {text}
+    </span>
   );
 }

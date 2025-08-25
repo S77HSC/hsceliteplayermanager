@@ -1,8 +1,8 @@
 // src/App.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "./lib/supabase"; // ← adjust if your client is elsewhere
+import { supabase } from "./lib/supabase"; // keep your client import
 
-// Your existing tabs/components (keep these imports as in your project)
+// Your existing tabs/components
 import PlansTab from "./components/PlansTab";
 import SessionsTab from "./components/SessionsTab";
 import PlayersTab from "./components/PlayersTab";
@@ -11,11 +11,39 @@ import GradingTab from "./components/GradingTab";
 import SettingsTab from "./components/SettingsTab";
 import SessionPlannerTab from "./components/SessionPlannerTab";
 
-// Intro overlay (no external deps in the component file)
+// Intro overlay
 import EliteIntro from "./components/EliteIntro";
-import logo from "./assets/powerplay-logo.png"; // ensure this file exists
+import logo from "./assets/powerplay-logo.png";
 
-/* ----------------- Minimal Sign-In ----------------- */
+/* ----------------- Error Boundary (prevents blank screen) ----------------- */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl m-4">
+          <div className="font-semibold mb-2">Something went wrong.</div>
+          <pre className="whitespace-pre-wrap">{String(this.state.error?.message || this.state.error)}</pre>
+          <button className="mt-3 px-3 py-2 border rounded-lg" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* ----------------- Minimal Sign-In (with labels/ids) ----------------- */
 function SignInCard() {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
@@ -23,10 +51,7 @@ function SignInCard() {
 
   async function signIn() {
     setMsg("");
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: pass,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) setMsg(error.message);
   }
 
@@ -41,38 +66,43 @@ function SignInCard() {
     <div className="app-shell">
       <div className="card" style={{ maxWidth: 560, margin: "0 auto" }}>
         <h1 className="section-title">Elite Player Manager</h1>
-        <p className="text-sm text-slate-600 mb-3">
-          Please sign in to access your dashboard.
-        </p>
+        <p className="text-sm text-slate-600 mb-3">Please sign in to access your dashboard.</p>
 
         <div className="grid md:grid-cols-2 gap-3">
-          <input
-            className="input"
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <input
-            className="input"
-            type="password"
-            placeholder="Password"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            autoComplete="current-password"
-          />
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-slate-600">Email</span>
+            <input
+              id="login-email"
+              name="email"
+              className="input"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-slate-600">Password</span>
+            <input
+              id="login-password"
+              name="password"
+              className="input"
+              type="password"
+              placeholder="••••••••"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
         </div>
 
         {msg && <p className="text-sm text-red-600 mt-2">{msg}</p>}
 
         <div className="flex gap-2 mt-3">
-          <button className="btn-primary" onClick={signIn}>
-            Sign in
-          </button>
-          <button className="btn btn-outline" onClick={signUp}>
-            Create account
-          </button>
+          <button className="btn-primary" onClick={signIn}>Sign in</button>
+          <button className="btn btn-outline" onClick={signUp}>Create account</button>
         </div>
       </div>
     </div>
@@ -85,28 +115,28 @@ export default function App() {
   const [userEmail, setUserEmail] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Show intro ONLY when logged in (every login)
+  // intro overlay shown after login
   const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    // Initial session check (e.g., page refresh while logged in)
+    // initial session (refresh etc.)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
       const user = session?.user ?? null;
       setUserId(user?.id || null);
       setUserEmail(user?.email || "");
-      if (user) setShowIntro(true); // show intro if already logged in
+      if (user) setShowIntro(true);
     });
 
-    // React to login/logout
+    // auth changes
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       const user = session?.user ?? null;
       setUserId(user?.id || null);
       setUserEmail(user?.email || "");
-      if (user) setShowIntro(true); // show intro every time you log in
-      else setShowIntro(false);     // hide when logged out
+      if (user) setShowIntro(true);
+      else setShowIntro(false);
     });
 
     return () => {
@@ -135,8 +165,7 @@ export default function App() {
 
   const accent = branding?.accent || "#0f172a";
   const logoUrl = branding?.logo_path
-    ? supabase.storage.from("branding").getPublicUrl(branding.logo_path).data
-        .publicUrl
+    ? supabase.storage.from("branding").getPublicUrl(branding.logo_path).data.publicUrl
     : null;
 
   // Tabs
@@ -165,10 +194,7 @@ export default function App() {
   async function fetchPlans() {
     if (!userId) return;
     const { data, error } = await supabase
-      .from("plans")
-      .select("*")
-      .eq("user_id", userId)
-      .order("title");
+      .from("plans").select("*").eq("user_id", userId).order("title");
     if (error) {
       console.error("fetchPlans error:", error);
       alert(`Couldn't fetch plans: ${error.message}`);
@@ -180,8 +206,7 @@ export default function App() {
       defaultLocation: p.defaultLocation ?? p.default_location ?? "",
       defaultTime: p.defaultTime ?? p.default_time ?? "",
       fourCorners: p.fourCorners ?? p.four_corners ?? {},
-      attachmentPaths:
-        p.attachments ?? p.attachmentPaths ?? p.attachment_paths ?? [],
+      attachmentPaths: p.attachments ?? p.attachmentPaths ?? p.attachment_paths ?? [],
     }));
     setPlans(mapped);
   }
@@ -189,10 +214,7 @@ export default function App() {
   async function fetchSessions() {
     if (!userId) return;
     const { data, error } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("date", { ascending: false });
+      .from("sessions").select("*").eq("user_id", userId).order("date", { ascending: false });
     if (error) {
       console.error("fetchSessions error:", error);
       alert(`Couldn't fetch sessions: ${error.message}`);
@@ -205,10 +227,7 @@ export default function App() {
   async function fetchPlayers() {
     if (!userId) return;
     const { data, error } = await supabase
-      .from("players")
-      .select("*")
-      .eq("user_id", userId)
-      .order("name");
+      .from("players").select("*").eq("user_id", userId).order("name");
     if (error) {
       console.error("fetchPlayers error:", error);
       alert(`Couldn't fetch players: ${error.message}`);
@@ -221,11 +240,7 @@ export default function App() {
   async function fetchGradeRules() {
     if (!userId) return;
     const { data, error } = await supabase
-      .from("grading_rules")
-      .select("*")
-      .eq("user_id", userId)
-      .order("area")
-      .order("target_belt");
+      .from("grading_rules").select("*").eq("user_id", userId).order("area").order("target_belt");
     if (error) {
       console.error("fetchGradeRules error:", error);
       alert(`Couldn't fetch grading rules: ${error.message}`);
@@ -238,10 +253,7 @@ export default function App() {
   async function fetchGradings() {
     if (!userId) return;
     const { data, error } = await supabase
-      .from("player_gradings")
-      .select("*")
-      .eq("user_id", userId)
-      .order("scheduled_date", { ascending: true });
+      .from("player_gradings").select("*").eq("user_id", userId).order("scheduled_date", { ascending: true });
     if (error) {
       console.error("fetchGradings error:", error);
       alert(`Couldn't fetch gradings: ${error.message}`);
@@ -271,7 +283,7 @@ export default function App() {
     setActive("sessions");
   }
 
-  /* --------- LOGGED OUT: just show login (no intro here) --------- */
+  /* --------- LOGGED OUT --------- */
   if (!userId) {
     return <SignInCard />;
   }
@@ -289,37 +301,22 @@ export default function App() {
                 style={{ borderColor: accent }}
                 title={branding.slogan || branding.brand_name}
               >
-                {logoUrl && (
-                  <img src={logoUrl} alt="logo" className="w-5 h-5 rounded" />
-                )}
+                {logoUrl && <img src={logoUrl} alt="logo" className="w-5 h-5 rounded" />}
                 <span className="font-medium" style={{ color: accent }}>
                   {branding.brand_name || "Brand"}
                 </span>
-                {branding.slogan && (
-                  <span className="text-xs text-slate-500">
-                    — {branding.slogan}
-                  </span>
-                )}
+                {branding.slogan && <span className="text-xs text-slate-500">— {branding.slogan}</span>}
               </span>
             )}
           </div>
 
           <div className="hidden md:flex items-center gap-2">
-            {userEmail && (
-              <span className="text-sm text-slate-600 truncate max-w-[150px]">
-                {userEmail}
-              </span>
-            )}
-            <button className="btn btn-outline" onClick={logout}>
-              Logout
-            </button>
+            {userEmail && <span className="text-sm text-slate-600 truncate max-w-[150px]">{userEmail}</span>}
+            <button className="btn btn-outline" onClick={logout}>Logout</button>
           </div>
 
           <div className="flex md:hidden">
-            <button
-              className="btn btn-outline"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-            >
+            <button className="btn btn-outline" onClick={() => setMobileMenuOpen((prev) => !prev)}>
               {mobileMenuOpen ? "✕" : "☰"}
             </button>
           </div>
@@ -341,24 +338,13 @@ export default function App() {
         {/* Mobile menu */}
         {mobileMenuOpen && (
           <div className="flex flex-col gap-2 mt-2 md:hidden">
-            {userEmail && (
-              <span className="text-sm text-slate-600 truncate max-w-full">
-                {userEmail}
-              </span>
-            )}
-            <button className="btn btn-outline w-full" onClick={logout}>
-              Logout
-            </button>
+            {userEmail && <span className="text-sm text-slate-600 truncate max-w-full">{userEmail}</span>}
+            <button className="btn btn-outline w-full" onClick={logout}>Logout</button>
             {TABS.map((t) => (
               <button
                 key={t.key}
-                className={`tab w-full text-left ${
-                  active === t.key ? "tab-active" : ""
-                }`}
-                onClick={() => {
-                  setActive(t.key);
-                  setMobileMenuOpen(false);
-                }}
+                className={`tab w-full text-left ${active === t.key ? "tab-active" : ""}`}
+                onClick={() => { setActive(t.key); setMobileMenuOpen(false); }}
               >
                 {t.label}
               </button>
@@ -381,7 +367,10 @@ export default function App() {
 
         {active === "designer" && (
           <div className="h-[calc(100vh-160px)]">
-            <SessionPlannerTab />
+            {/* Only wrap the designer in an error boundary to avoid full-app white screens */}
+            <ErrorBoundary>
+              <SessionPlannerTab />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -433,9 +422,7 @@ export default function App() {
           />
         )}
 
-        {active === "settings" && (
-          <SettingsTab userId={userId} onChange={(b) => setBranding(b)} />
-        )}
+        {active === "settings" && <SettingsTab userId={userId} onChange={(b) => setBranding(b)} />}
       </main>
 
       {/* Intro overlay: shows every time you log in, click triggers fullscreen */}
